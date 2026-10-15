@@ -1,0 +1,41 @@
+name: PS5 stock monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # GitHub's minimum; runs can start a few minutes late
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: "Send a test push notification instead of checking"
+        type: boolean
+        default: false
+
+# One run at a time; a new scheduled run waits instead of overlapping.
+concurrency:
+  group: ps5-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Send test alert
+        if: ${{ inputs.test_alert }}
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python ps5_stock_monitor.py --test-alert
+
+      # Each run checks about once a minute for ~4.5 minutes, so with a run
+      # every 5 minutes the page is checked roughly every minute overall.
+      - name: Watch for restock
+        if: ${{ !inputs.test_alert }}
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python ps5_stock_monitor.py --duration 270 --interval 60 --no-browser
